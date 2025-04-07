@@ -14,6 +14,15 @@ Pixel::Pixel(int r, int g, int b)
     blue = b;
 }
 
+int Pixel::getColour(int colourcode) {
+    if (colourcode == 0) { 
+        return (int) red;
+    } else if (colourcode == 1) {
+        return (int) green;
+    } else {return (int) blue;}
+    
+}
+
 Pixel::~Pixel()
 {
 }

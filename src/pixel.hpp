@@ -10,6 +10,7 @@ public:
     Pixel();
     Pixel(int r, int g, int b);
     ~Pixel();
+    int getColour(int colourcode);
     void displayPixel();
 };
 #endif
