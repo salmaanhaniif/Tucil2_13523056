@@ -12,10 +12,19 @@ Point::Point(int xIn, int yIn)
     y = yIn;
 }
 
+
 Point::~Point()
 {
 }
 
 void Point::displayPosition() {
     std::cout << "Posisi saat ini : (" << x << "," << y << ")." <<std::endl;
+}
+
+int Point::getX() {
+    return x;
+}
+
+int Point::getY() {
+    return y;
 }

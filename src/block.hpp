@@ -1,5 +1,6 @@
 #include "iostream"
 #include "pixel.hpp"
+#include "point.hpp"
 #ifndef BLOCK_H
 #define BLOCK_H
 
@@ -13,18 +14,21 @@ private:
 public:
     Block();
     Block(int w, int h);
+    Block(const Block& other);
+    Block& operator=(const Block& other);
     ~Block();
     int getWidth();
     int getHeight();
     int getArea();
     void displayBlock();
-    Block getSubBlock(int startX, int startY, int w, int h);
     Pixel** getBlockIntensity() const;
-    Pixel getIntensity(int x, int y) const;
-    void setIntensity(int x, int y, const Pixel& pixel);
+    Block* getSubBlock(Point startPoint, int w, int h);
+    Pixel getIntensity(Point pos) const;
+    void setIntensity(Point pos, const Pixel& pixel);
     
     void normalise();
     double getAverage(int colourCode);
+    Pixel calculateAverageColor();
     double calculateVariance();
     double calculateVarianceHelper(int colourCode);
     double calculateMAD();

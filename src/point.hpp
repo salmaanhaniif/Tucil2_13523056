@@ -11,6 +11,8 @@ public:
     Point();
     Point(int x, int y);
     ~Point();
+    int getX();
+    int getY();
     void displayPosition();
 };
 

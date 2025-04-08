@@ -1,28 +1,68 @@
 #include <iostream>
 #include "block.hpp"
+#include <cmath>
 #include <vector>
 
-// Block::Block()
-// {
-//     width = 0;
-//     height = 0;
-// }
+Block::Block() {
+    width = 0;
+    height = 0;
+    intensity = nullptr;
+}
 
 Block::Block(int w, int h)
 {
     width = w;
     height = h;
+    intensity = new Pixel*[height];
     for (int i = 0; i < height; i++) {
         intensity[i] = new Pixel[width];
     }
 }
 
+Block::Block(const Block& other) {
+    width = other.width;
+    height = other.height;
+
+    intensity = new Pixel*[height];
+    for (int i = 0; i < height; i++) {
+        intensity[i] = new Pixel[width];
+        for (int j = 0; j < width; j++) {
+            intensity[i][j] = other.intensity[i][j];
+        }
+    }
+}
+
+Block& Block::operator=(const Block& other) {
+    if (this == &other) return *this; // handle self assign
+
+    // bersihin data lama
+    if (intensity) {
+        for (int i = 0; i < height; i++)
+            delete[] intensity[i];
+        delete[] intensity;
+    }
+
+    width = other.width;
+    height = other.height;
+
+    intensity = new Pixel*[height];
+    for (int i = 0; i < height; i++) {
+        intensity[i] = new Pixel[width];
+        for (int j = 0; j < width; j++) {
+            intensity[i][j] = other.intensity[i][j];
+        }
+    }
+    return *this;
+}
+
 Block::~Block()
 {
-    for (int i = 0; i < height; i++) {
-        delete[] intensity[i];
+    if (intensity != nullptr) {
+        for (int i = 0; i < height; i++) {
+            delete[] intensity[i];
+        }
+        delete[] intensity;
     }
-    delete[] intensity;
 }
 
 int Block::getWidth() {
@@ -40,12 +80,24 @@ Pixel** Block::getBlockIntensity() const {
     return intensity;
 }
 
-Pixel Block::getIntensity(int x, int y) const {
-    return intensity[y][x];
+Block* Block::getSubBlock(Point startPoint, int w, int h) {
+    Block* subBlock = new Block(w,h); 
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            subBlock->intensity[y][x] = intensity[startPoint.getY() + y][startPoint.getX() + x];
+        }
+    }
+
+    return subBlock; 
 }
 
-void Block::setIntensity(int x, int y, const Pixel& pixel) {
-    intensity[y][x] = pixel;
+Pixel Block::getIntensity(Point pos) const {
+    return intensity[pos.getY()][pos.getX()];
+}
+
+void Block::setIntensity(Point pos, const Pixel& pixel) {
+    intensity[pos.getY()][pos.getX()] = pixel;
 }
 
 void Block::displayBlock() {
@@ -62,6 +114,15 @@ double Block::getAverage(int colourCode) {
         }
     }
     avg = avg / getArea();
+    return avg;
+}
+
+Pixel Block::calculateAverageColor() {
+    int avgR = getAverage(0); // 0 = Red
+    int avgG = getAverage(1); // 1 = Green
+    int avgB = getAverage(2); // 2 = Blue
+
+    return Pixel(avgR, avgG, avgB);
 }
 
 void Block::normalise() {
@@ -95,7 +156,7 @@ double Block::calculateVarianceHelper(int colourCode)
     {
         for (int x = 0; x < width; x++)
         {
-            sigma += pow(intensity[y][x].getColour(colourCode) - avg, 2);
+            sigma += powf(intensity[y][x].getColour(colourCode) - avg, 2);
         }
     }
     sigma = sigma / getArea();
