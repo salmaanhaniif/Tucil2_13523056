@@ -3,19 +3,22 @@
 #include <cmath>
 #include <vector>
 
-QuadTree::QuadTree(Point pos, Block sz)
+QuadTree::QuadTree(Point pos, Block bl)
 {
     position = pos;
-    size = sz;
-    intensity = new Pixel[size.getArea()];
-    child = new QuadTree *[maxChild];
-    for (int i = 0; i < maxChild; i++)
-    {
-        child[i] = nullptr;
-    }
+    block = bl;
+    // intensity = new Pixel*[sz.getHeight()];
+    // for (int i = 0; i < sz.getHeight(); i++) {
+    //     intensity[i] = new Pixel[sz.getWidth()];
+    // }
+    child = new QuadTree *[maxChild] {nullptr};
+    // for (int i = 0; i < maxChild; i++)
+    // {
+    //     child[i] = nullptr;
+    // }
 }
 
-QuadTree *QuadTree::buildFromImage(const char *filename)
+QuadTree *QuadTree::buildFromImage(const char* filename)
 {
     int width, height, channels;
     unsigned char *image = stbi_load(filename, &width, &height, &channels, 0);
@@ -33,135 +36,70 @@ QuadTree *QuadTree::buildFromImage(const char *filename)
         for (int x = 0; x < width; x++)
         {
             int index = (y * width + x) * channels;
-            node->intensity[y * width + x] = Pixel(image[index], image[index + 1], image[index + 2]);
+            // node->block.intensity[y][x] = Pixel(image[index], image[index + 1], image[index + 2]);
+            node->block.setIntensity(x, y, Pixel(image[index], image[index + 1], image[index + 2]));
         }
     }
     stbi_image_free(image);
     return node;
 }
 
+void QuadTree::mainProcess(int emd, double threshold, int minblock) {
+    double variance;
+    switch (emd)
+    {
+    case 1:
+        variance = block.calculateVariance();
+        break;
+    case 2:
+        variance = block.calculateMAD();
+        break;
+    case 3:
+        variance = block.calculateMPD();
+        break;
+    default:
+        variance = block.calculateEntropy();
+        break;
+    }
+
+    if (variance < threshold || block.getArea() < minblock|| (block.getArea()/4) < minblock)
+    {
+        block.normalise();
+        return;
+    }
+    else
+    {
+        int midWidth = (int) block.getWidth()/2;
+        int midHeight = (int) block.getHeight()/2;
+        Point pos1(0,0);
+        Point pos2(midWidth,0);
+        Point pos1(0,midHeight);
+        Point pos1(midWidth,midHeight);
+    }
+    
+    
+}
+
 void QuadTree::printQuadTree()
 {
     position.displayPosition();
-    size.displayBlock();
+    block.displayBlock();
 
     std::cout << "[";
-    for (int i = 0; i < size.getArea(); i++)
+    for (int y = 0; y < block.getHeight(); y++)
     {
-        intensity[i].displayPixel();
-        std::cout << " ";
+        for (int x = 0; x < block.getWidth(); x++)
+        {
+            // block.intensity[y][x].displayPixel();
+            block.getIntensity(x, y).displayPixel();
+            std::cout << " ";
+        }
+        std::cout << "\n";
     }
     std::cout << "]" << std::endl;
 }
 
-double QuadTree::getAverage(int colourCode) {
-    double avg = 0;
-    for (int i = 0; i < size.getArea(); i++)
-    {
-        avg += (int)intensity[i].getColour(colourCode);
-    }
-    avg = avg / size.getArea();
-}
 
-double QuadTree::calculateVariance()
-{
-    double variance = 0;
-    variance = variance + calculateVarianceHelper(0) + calculateVarianceHelper(1) + calculateVarianceHelper(2);
-    return variance / 3;
-}
-
-double QuadTree::calculateVarianceHelper(int colourCode)
-{
-    double avg = getAverage(colourCode);
-    double sigma = 0;
-    for (int i = 0; i < size.getArea(); i++)
-    {
-        sigma += pow(((int)intensity[i].getColour(colourCode) - avg), 2);
-    }
-    sigma = sigma / size.getArea();
-    return sigma;
-}
-
-double QuadTree::calculateMAD()
-{
-    double mad = 0;
-    mad = mad + calculateMADHelper(0) + calculateMADHelper(1) + calculateMADHelper(2);
-    return mad / 3;
-}
-
-double QuadTree::calculateMADHelper(int colourCode)
-{
-    double avg = getAverage(colourCode);
-    double sigma = 0;
-    for (int i = 0; i < size.getArea(); i++)
-    {
-        sigma += abs((int)intensity[i].getColour(colourCode) - avg);
-    }
-    sigma = sigma / size.getArea();
-    return sigma;
-}
-
-double QuadTree::calculateMPD()
-{
-    auto result = calculateMPDHelper(0, 0, size.getArea()-1);
-    int minr = result.first;
-    int maxr = result.second;
-    auto result1 = calculateMPDHelper(1, 0, size.getArea()-1);
-    int ming = result.first;
-    int maxg = result.second;
-    auto result2 = calculateMPDHelper(2, 0, size.getArea()-1);
-    int minb = result.first;
-    int maxb = result.second;
-
-    return ((maxr - minr + maxg - ming + maxb - minb) / 3);
-}
-
-std::pair<int, int> QuadTree::calculateMPDHelper(int colourCode, int l, int r)
-{
-    if (l == r)
-    {
-        int val = intensity[l].getColour(colourCode);
-        return {val, val}; // min = max = 1 pixel itu
-    }
-
-    int mid = (l + r) / 2;
-    auto left = calculateMPDHelper(colourCode, l, mid);
-    auto right = calculateMPDHelper(colourCode, mid + 1, r);
-
-    int minVal = std::min(left.first, right.first);
-    int maxVal = std::max(left.second, right.second);
-    return {minVal, maxVal};
-}
-
-double QuadTree::calculateEntropy()
-{
-    return ((calculateEntropyHelper(0) + calculateEntropyHelper(1) + calculateEntropyHelper(2))/3);
-}
-
-double QuadTree::calculateEntropyHelper(int colourCode)
-{
-    int N = 256;
-    std::vector<int> histogram(N, 0);
-    int totalPixel = size.getArea();
-
-    // Hitung histogram untuk channel tertentu
-    for (int i = 0; i < totalPixel; i++)
-    {
-        int colourVal = (int) intensity[i].getColour(colourCode);
-        histogram[colourVal]++;
-    }
-    
-    double entropy = 0;
-
-    for (int i = 0; i < N; i++)
-    {
-        if (histogram[i] > 0) {
-            double prob = (double) histogram[i]/totalPixel;
-            entropy -= prob * log2(prob);
-        }
-    }
-    return entropy;
-}
 
 QuadTree::~QuadTree()
 {
@@ -170,13 +108,12 @@ QuadTree::~QuadTree()
         delete child[i];
     }
     delete[] child;
-    delete[] intensity;
 }
 
 int main(int argc, char const *argv[])
 {
     QuadTree *tes = QuadTree::buildFromImage("../test/monyet.jpg");
     tes->printQuadTree();
-    std::cout << "Variance: " << tes->calculateVariance() << ", MAD: " << tes->calculateMAD() << ", MPD: " << tes->calculateMPD() << ", Entropy: " << tes->calculateEntropy() << std::endl;
+    // std::cout << "Variance: " <<  << ", MAD: " << tes->calculateMAD() << ", MPD: " << tes->calculateMPD() << ", Entropy: " << tes->calculateEntropy() << std::endl;
     return 0;
 }

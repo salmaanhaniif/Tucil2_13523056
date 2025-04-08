@@ -11,6 +11,7 @@ public:
     Pixel(int r, int g, int b);
     ~Pixel();
     int getColour(int colourcode);
+    void setColour(int colourcode, double value);
     void displayPixel();
 };
 #endif

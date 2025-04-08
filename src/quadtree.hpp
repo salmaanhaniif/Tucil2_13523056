@@ -14,25 +14,17 @@ class QuadTree
 
 private:
     Point position;
-    Block size;
-    Pixel* intensity;
+    Block block;
     QuadTree* *child;
     int maxChild = 4;
 
 public:
     QuadTree(Point pos, Block sz);
     static QuadTree* buildFromImage (const char* filename);
+    void mainProcess(int emd, double threshold, int minSize);
     ~QuadTree();
 
-    double getAverage(int colourCode);
-    double calculateVariance();
-    double calculateVarianceHelper(int colourCode);
-    double calculateMAD();
-    double calculateMADHelper(int colourCode);
-    double calculateMPD();
-    std::pair<int, int> calculateMPDHelper(int colourCode, int l, int r);
-    double calculateEntropy();
-    double calculateEntropyHelper(int colourCode);
+    
 
     void printQuadTree();
 };
