@@ -25,7 +25,8 @@ public:
     Block* getSubBlock(Point startPoint, int w, int h);
     Pixel getIntensity(Point pos) const;
     void setIntensity(Point pos, const Pixel& pixel);
-    
+    void fillWithColor(const Pixel &pix);
+
     void normalise();
     double getAverage(int colourCode);
     Pixel calculateAverageColor();

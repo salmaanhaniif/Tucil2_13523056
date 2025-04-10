@@ -125,6 +125,14 @@ Pixel Block::calculateAverageColor() {
     return Pixel(avgR, avgG, avgB);
 }
 
+void Block::fillWithColor(const Pixel &pix) {
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            intensity[y][x] = pix;
+        }
+    }
+}
+
 void Block::normalise() {
     double redAvg = getAverage(0);
     double greenAvg = getAverage(1);

@@ -15,9 +15,6 @@ using namespace std;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-// #define GIF_IMPLEMENTATION
-#include "gif.h"
-
 std::vector<unsigned char> load_file(const std::string& filename) {
     std::ifstream file(filename, std::ios::binary);
     return std::vector<unsigned char>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -25,92 +22,127 @@ std::vector<unsigned char> load_file(const std::string& filename) {
 
 int main(int argc, char const *argv[])
 {
+    // Input dari user:
     string imagepathIn;
     int emd;
     double threshold;
     int minSize;
     string imagepathOut;
-    string gifOut;
+    
+    cout << endl << "~Welcome to Image Compressor by QuadTree~" << endl << endl;
+    cout << "Tuliskan filepath dari Image (input): ";
+    cin >> imagepathIn;
 
-    cout << "Welcome to Image Compressor by QuadTree" << endl << endl;
-    cout << "Tuliskan filepath dari Image (input): "; cin >> imagepathIn;
-    cout << "Error Measurement Method" << endl << "1.Variance" << endl << "2.MAD" << endl << "3.MPD" << endl << "4.Entropy" << endl;
-    cout << "Choose one (number): "; cin >> emd;
-    cout << "Tentukan Nilai Threshold: "; cin >> threshold;
-    cout << "Tentukan Area Minimum Block: ";cin >> minSize;
-    cout << "Tuliskan filepath untuk Hasil: "; cin >> imagepathOut;
-    cout << "Tuliskan filepath untuk Gif: "; cin >> gifOut;
+    cout << "Error Measurement Method" << endl;
+    cout << "1. Variance" << endl;
+    cout << "2. Mean Absolute Deviation" << endl;
+    cout << "3. Max Pixel Difference" << endl;
+    cout << "4. Entropy" << endl;
+    cout << "Choose one (number): ";
+    cin >> emd;
+    cout << "Tentukan Nilai Threshold: ";
+    cin >> threshold;
+    cout << "Tentukan Area Minimum Block: ";
+    cin >> minSize;
+    cout << "Tuliskan filepath untuk hasil rekonstruksi (output image): ";
+    cin >> imagepathOut;
     cout << endl;
-
+    
     auto start = chrono::high_resolution_clock::now();
-
+    
     cout << "Processing..." << endl << endl;
+    // 1. Membangun quadtree dari gambar menggunakan fungsi impor buildFromImage
     QuadTree* tree = QuadTree::buildFromImage(imagepathIn.c_str());
-    // Dapatkan dimensi gambar dari block root
-    int imgWidth = tree->getWidth();
-    int imgHeight = tree->getHeight();
-
-    Pixel** canvas = new Pixel*[imgHeight];
-    for (int i = 0; i < imgHeight; i++) {
-        canvas[i] = new Pixel[imgWidth];
-    }
-    // Inisialisasi canvas dengan intensitas asli dari tree->block
-    for (int y = 0; y < imgHeight; y++) {
-        for (int x = 0; x < imgWidth; x++) {
-            canvas[y][x] = tree->getIntensity(Point(x,y));
-        }
-    }
-
-    // Inisialisasi GIFWriter (menggunakan gif.h)
-    GifWriter gif;
-    // Mulai GIF dengan filename outputGIF, lebar, tinggi, dan delay frame (misalnya 10 = 100ms per frame)
-    if (!GifBegin(&gif, gifOut.c_str(), imgWidth, imgHeight, 10)) {
-        std::cerr << "Error: Gagal menginisialisasi GIF.\n";
+    if(tree == nullptr){
+        cerr << "Gagal membangun QuadTree dari gambar!" << endl;
         return 1;
     }
-
-    // Jalankan proses kompresi dengan memasukkan pointer ke canvas dan gif
-    tree->mainProcess(1, threshold, minSize, canvas, imgWidth, imgHeight, &gif);
-
-    // (Opsional) Pastikan canvas final sudah penuh terisi
-    tree->fillCanvas(canvas);
     
-    // Tambahkan frame final ke GIF
-    // Misalnya: captureFrame() sudah dipanggil di mainProcess, jadi tidak perlu dipanggil lagi.
+    // 2. Melakukan proses kompresi dengan subdivisi (sesuai error measurement, threshold, dan minimum block)
+    tree->mainProcess(emd, threshold, minSize);
     
-    // Selesaikan GIF
-    GifEnd(&gif);
-
-    int treeDepth = tree->getDepth();
-    int nodesCount = tree->countNodes();
-    tree->exportToPNG(imagepathOut.c_str());
-    for (int i = 0; i < imgHeight; i++) {
-        delete[] canvas[i];
+    // 3. Serialisasi struktur quadtree ke file biner (misalnya "compressed.quadtree")
+    ofstream outFile("compressed.quadtree", ios::binary);
+    if (!outFile) {
+        cerr << "Gagal membuka file untuk penulisan quadtree!" << endl;
+        return 1;
     }
-    delete[] canvas;
-
+    tree->saveToImage(outFile);
+    outFile.close();
+    
+    // 4. Deserialisasi quadtree dari file untuk merekonstruksi gambar
+    ifstream inFile("compressed.quadtree", ios::binary);
+    if (!inFile) {
+        cerr << "Gagal membuka file untuk pembacaan quadtree!" << endl;
+        return 1;
+    }
+    QuadTree* loadedTree = QuadTree::loadFromImage(inFile);
+    inFile.close();
+    
+    // 5. Rekonstruksi canvas dari quadtree yang dideserialisasi
+    int width = loadedTree->getWidth();
+    int height = loadedTree->getHeight();
+    
+    // Alokasi canvas sesuai ukuran gambar
+    Pixel** canvas = new Pixel*[height];
+    for (int i = 0; i < height; i++) {
+        canvas[i] = new Pixel[width];
+    }
+    // Inisialisasi canvas dengan warna default (misal hitam)
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            canvas[y][x] = Pixel(0,0,0);
+        }
+    }
+    loadedTree->fillCanvas(canvas);
+    
+    // 6. (Opsional) Export canvas hasil rekonstruksi ke file gambar
+    // Jika Anda menggunakan library seperti stb_image_write, Anda bisa membuat buffer pixel dan memanggil fungsi write
+    // Contoh: membuat buffer dan memanggil stbi_write_png:
+    unsigned char* imgData = new unsigned char[width * height * 3];
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int idx = (y * width + x) * 3;
+            imgData[idx]     = canvas[y][x].getColour(0);
+            imgData[idx + 1] = canvas[y][x].getColour(1);
+            imgData[idx + 2] = canvas[y][x].getColour(2);
+        }
+    }
+    // Contoh pemanggilan stbi_write_png (pastikan sudah include header yang diperlukan)
+    stbi_write_png(imagepathOut.c_str(), width, height, 3, imgData, width * 3);
+    
+    // 7. Menghitung waktu eksekusi dan perbandingan ukuran file
     auto end = chrono::high_resolution_clock::now();
     auto exec_time = chrono::duration<double>(end-start).count();
-
-    int widthIn, heightIn, channelsIn;
-    int widthOut, heightOut, channelsOut;
+    
     auto bufferIn = load_file(imagepathIn);
     auto bufferOut = load_file(imagepathOut);
+    int widthIn, heightIn, channelsIn;
+    int widthOut, heightOut, channelsOut;
     stbi_info_from_memory(bufferIn.data(), bufferIn.size(), &widthIn, &heightIn, &channelsIn);
     stbi_info_from_memory(bufferOut.data(), bufferOut.size(), &widthOut, &heightOut, &channelsOut);
     uintmax_t sizeIn = filesystem::file_size(imagepathIn);
     uintmax_t sizeOut = filesystem::file_size(imagepathOut);
-    double cp = (1 - (int)sizeOut/(int)sizeIn) * 100;
-
-
-    cout << "Compressing Complete!" << endl;
-    cout << "DETAILS: " << endl;
-    cout << "Execution Time : " << exec_time*1000 << " ms"<<endl;
-    cout << "Size before : " << sizeIn/1000 << " kb, " << widthIn << "x" << heightIn << "pixels" << endl;
-    cout << "Size after : " << sizeOut/1000 << " kb, " << widthOut << "x" << heightOut << "pixels" << endl;
-    cout << "Compression Percentage : " << cp << " %" << endl;
-    cout << "Tree's Depth : " << treeDepth << endl;
-    cout << "Nodes Count : " << nodesCount << endl;
-    cout << "Result Path : " << imagepathOut << endl;
+    double cp = (1 - (double)sizeOut/(double)sizeIn) * 100;
+    
+    cout << "\nCompressing Complete!" << endl;
+    cout << "DETAILS:" << endl;
+    cout << "Execution Time       : " << exec_time*1000 << " ms" << endl;
+    cout << "Size before (input)  : " << sizeIn/1000 << " kb, " << widthIn << "x" << heightIn << " pixels" << endl;
+    cout << "Size after (output)  : " << sizeOut/1000 << " kb, " << widthOut << "x" << heightOut << " pixels" << endl;
+    cout << "Compression Percent  : " << fixed << setprecision(3) << cp << " %" << endl;
+    cout << "Tree's Depth         : " << tree->getDepth() << endl;     // Pastikan fungsi getDepth() sudah diimplementasikan
+    cout << "Nodes Count          : " << tree->countNodes() << endl;     // Pastikan fungsi countNodes() sudah diimplementasikan
+    cout << "Result Path          : " << imagepathOut << endl;
+    
+    // 8. Cleanup memori
+    for (int i = 0; i < height; i++) {
+        delete[] canvas[i];
+    }
+    delete[] canvas;
+    delete[] imgData;
+    delete tree;
+    delete loadedTree;
+    
     return 0;
 }

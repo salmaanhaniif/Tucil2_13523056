@@ -2,7 +2,8 @@
 #include "quadtree.hpp"
 #include <cmath>
 #include <vector>
-#include "gif.h"
+#include <iostream>
+#include <fstream>
 
 #include "stb_image_write.h"
 #include "stb_image.h"
@@ -12,183 +13,198 @@ QuadTree::QuadTree(Point pos, Block bl)
     position = pos;
     block = bl;
     child = new QuadTree *[maxChild] {nullptr};
+    // average = block.calculateAverageColor();
+    average = Pixel(0,0,0);
 }
 
-// Fungsi membangun QuadTree dari image file
-QuadTree* QuadTree::buildFromImage(const char* filename) {
+QuadTree *QuadTree::buildFromImage(const char* filename)
+{
     int width, height, channels;
-    unsigned char* image = stbi_load(filename, &width, &height, &channels, 0);
-    if (image == nullptr) {
+    unsigned char *image = stbi_load(filename, &width, &height, &channels, 0);
+
+    if (image == nullptr)
+    {
         std::cout << "Gagal memuat gambar" << std::endl;
         return nullptr;
     }
-    
-    // Buat Block berdasarkan ukuran gambar
-    Block blk(width, height);
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
+
+    // std::cout << "Berhasil memuat gambar" << std::endl;
+
+    QuadTree *node = new QuadTree(Point(), Block(width, height));
+
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
             int index = (y * width + x) * channels;
-            Point p(x, y);
-            // Asumsikan setIntensity meng-copy pixel ke array 2D intensity
-            blk.setIntensity(p, Pixel(image[index], image[index+1], image[index+2]));
+            Point temp = Point(x, y);
+            // node->block.intensity[y][x] = Pixel(image[index], image[index + 1], image[index + 2]);
+            node->block.setIntensity(temp, Pixel(image[index], image[index + 1], image[index + 2]));
         }
     }
+    // std::cout << "Image Loaded: width=" << width << ", height=" << height << ", channels=" << channels << std::endl;
     stbi_image_free(image);
-    // Node akar berada di posisi (0,0)
-    return new QuadTree(Point(0, 0), blk);
+    return node;
 }
 
-// Fungsi captureFrame: konversi canvas (Pixel** dengan dimensi canvasWidth x canvasHeight)
-// ke buffer unsigned char dan tambahkan sebagai frame ke GIF
-void QuadTree::captureFrame(Pixel** canvas, int canvasWidth, int canvasHeight, GifWriter* gif) {
-    // Alokasikan buffer untuk frame (RGB)
-    unsigned char* frameBuffer = new unsigned char[canvasWidth * canvasHeight * 3];
-    for (int y = 0; y < canvasHeight; y++) {
-        for (int x = 0; x < canvasWidth; x++) {
-            int idx = (y * canvasWidth + x) * 3;
-            frameBuffer[idx]     = canvas[y][x].getColour(0);
-            frameBuffer[idx + 1] = canvas[y][x].getColour(1);
-            frameBuffer[idx + 2] = canvas[y][x].getColour(2);
-        }
+void QuadTree::mainProcess(int emd, double threshold, int minblock) {
+    // std::cout << "Starting mainProcess" << std::endl;
+    // std::cout << "Current Block Width: " << block.getWidth() << ", Height: " << block.getHeight() << std::endl;
+    double variance;
+    switch (emd)
+    {
+    case 1:
+        variance = block.calculateVariance();
+        break;
+    case 2:
+        variance = block.calculateMAD();
+        break;
+    case 3:
+        variance = block.calculateMPD();
+        break;
+    default:
+        variance = block.calculateEntropy();
+        break;
     }
-    // Misal, panggil fungsi dari library GIF untuk menambahkan frame.
-    // Contoh (sesuaikan dengan API library GIF yang kamu gunakan):
-    // GifWriteFrame(gif, frameBuffer, canvasWidth, canvasHeight, canvasWidth * 3, delay);
-    
-    // Contoh dummy:
-    // appendFrameToGIF(gif, frameBuffer, canvasWidth, canvasHeight, 10); // delay 10 centisecond
 
-    delete[] frameBuffer;
-}
-
-// Fungsi mainProcess yang diperbarui:  
-// - Jika error rendah (atau area sudah kecil) → node menjadi leaf, dan blok diisi dengan warna rata-rata.
-// - Setiap kali node leaf dihasilkan, update canvas (area sesuai posisi dan ukuran block) dan capture frame.
-void QuadTree::mainProcess(int emd, double threshold, int minblock, 
-                           Pixel** canvas, int canvasWidth, int canvasHeight, GifWriter* gif) {
-    double error;
-    switch (emd) {
-        case 1: error = block.calculateVariance(); break;
-        case 2: error = block.calculateMAD(); break;
-        case 3: error = block.calculateMPD(); break;
-        default: error = block.calculateEntropy(); break;
-    }
-    
-    if (error < threshold || block.getArea() < minblock || (block.getArea()/4) < minblock) {
-        // Hitung warna rata-rata untuk block ini
-        averageColor = block.calculateAverageColor();
-        // Normalisasi block: isi seluruh intensitas block dengan averageColor
-        block.normalise(); // Pastikan di dalam normalise() block diisi dengan averageColor,
-                           // atau bisa juga manual:
-        // for (int y = 0; y < block.getHeight(); y++) {
-        //     for (int x = 0; x < block.getWidth(); x++) {
-        //         block.setIntensity(Point(x,y), averageColor);
-        //     }
-        // }
-        // Update kanvas pada area block ini
-        for (int y = 0; y < block.getHeight(); y++) {
-            for (int x = 0; x < block.getWidth(); x++) {
-                int canvasY = position.getY() + y;
-                int canvasX = position.getX() + x;
-                if (canvasY < canvasHeight && canvasX < canvasWidth) {
-                    canvas[canvasY][canvasX] = averageColor;
-                }
-            }
-        }
-        // Capture frame untuk GIF
-        captureFrame(canvas, canvasWidth, canvasHeight, gif);
+    if (variance < threshold || block.getArea() < minblock|| (block.getArea()/4) < minblock)
+    {
+        average = block.calculateAverageColor();
         return;
-    } else {
-        int midWidth = block.getWidth() / 2;
-        int midHeight = block.getHeight() / 2;
-        
+    }
+    else
+    {
+        int midWidth = (int) block.getWidth()/2;
+        int midHeight = (int) block.getHeight()/2;
+
         int w0 = midWidth;
-        int w1 = (block.getWidth() % 2 == 0) ? midWidth : midWidth + 1;
+        int w1 = (block.getWidth() % 2 == 0) ? midWidth : midWidth+1;
         int h0 = midHeight;
-        int h1 = (block.getHeight() % 2 == 0) ? midHeight : midHeight + 1;
-        
-        // Hitung posisi untuk setiap kuadran berdasarkan posisi global
+        int h1 = (block.getHeight() % 2 == 0) ? midHeight : midHeight+1;
+
         Point pos1(position.getX(), position.getY());
         Point pos2(position.getX() + midWidth, position.getY());
         Point pos3(position.getX(), position.getY() + midHeight);
         Point pos4(position.getX() + midWidth, position.getY() + midHeight);
-        
-        // Dapatkan sub-block dengan koordinat relatif (dalam block)
+
         Block* b0 = block.getSubBlock(Point(0,0), w0, h0);
         Block* b1 = block.getSubBlock(Point(midWidth, 0), w1, h0);
         Block* b2 = block.getSubBlock(Point(0, midHeight), w0, h1);
         Block* b3 = block.getSubBlock(Point(midWidth, midHeight), w1, h1);
-        
-        // Buat child QuadTree untuk keempat kuadran
+
         child[0] = new QuadTree(pos1, *b0);
         child[1] = new QuadTree(pos2, *b1);
         child[2] = new QuadTree(pos3, *b2);
         child[3] = new QuadTree(pos4, *b3);
-        
+
         delete b0;
         delete b1;
         delete b2;
         delete b3;
-        
-        // Proses rekursif untuk setiap child, meneruskan canvas dan pointer GIF
-        for (int i = 0; i < maxChild; i++) {
-            child[i]->mainProcess(emd, threshold, minblock, canvas, canvasWidth, canvasHeight, gif);
-        }
-        // Opsional: capture frame setelah seluruh subdivisi pada node ini selesai
-        captureFrame(canvas, canvasWidth, canvasHeight, gif);
+    
+        for (int i = 0; i < 4; i++) {
+            child[i]->mainProcess(emd, threshold, minblock);
+        }  
+
     }
 }
 
-// Fungsi untuk me-*render* gambar terkompres ke canvas berdasarkan QuadTree akhir
-void QuadTree::fillCompressedImage(Pixel** outputImage) {
-    if (child[0] == nullptr) {  // Leaf node
+// Serialisasi struktur quadtree ke file biner
+void QuadTree::saveToImage(std::ofstream &out) {
+    bool isLeaf = (child[0] == nullptr);
+    out.write(reinterpret_cast<const char*>(&isLeaf), sizeof(isLeaf));
+    // Tulis informasi posisi dan ukuran blok
+    int posX = position.getX();
+    int posY = position.getY();
+    int width = block.getWidth();
+    int height = block.getHeight();
+    out.write(reinterpret_cast<const char*>(&posX), sizeof(posX));
+    out.write(reinterpret_cast<const char*>(&posY), sizeof(posY));
+    out.write(reinterpret_cast<const char*>(&width), sizeof(width));
+    out.write(reinterpret_cast<const char*>(&height), sizeof(height));
+
+    if (isLeaf) {
+        // Jika leaf, simpan informasi warna (misalnya dari 'average')
+        unsigned char r = average.getColour(0);
+        unsigned char g = average.getColour(1);
+        unsigned char b = average.getColour(2);
+        out.write(reinterpret_cast<const char*>(&r), sizeof(r));
+        out.write(reinterpret_cast<const char*>(&g), sizeof(g));
+        out.write(reinterpret_cast<const char*>(&b), sizeof(b));
+    } else {
+        // Simpan rekursif keempat child
+        for (int i = 0; i < 4; i++) {
+            child[i]->saveToImage(out);
+        }
+    }
+}
+
+// Deserialisasi quadtree dari file biner
+QuadTree* QuadTree::loadFromImage(std::ifstream &in) {
+    if (in.eof())
+        return nullptr;
+
+    bool isLeaf;
+    in.read(reinterpret_cast<char*>(&isLeaf), sizeof(isLeaf));
+    if (in.fail())
+        return nullptr;
+
+    int posX, posY, width, height;
+    in.read(reinterpret_cast<char*>(&posX), sizeof(posX));
+    in.read(reinterpret_cast<char*>(&posY), sizeof(posY));
+    in.read(reinterpret_cast<char*>(&width), sizeof(width));
+    in.read(reinterpret_cast<char*>(&height), sizeof(height));
+
+    // Buat node dengan informasi yang sudah dibaca
+    QuadTree* node = new QuadTree(Point(posX, posY), Block(width, height));
+
+    if (isLeaf) {
+        unsigned char r, g, b;
+        in.read(reinterpret_cast<char*>(&r), sizeof(r));
+        in.read(reinterpret_cast<char*>(&g), sizeof(g));
+        in.read(reinterpret_cast<char*>(&b), sizeof(b));
+        node->average = Pixel(r, g, b);
+        // Isi blok dengan warna rata-rata
+        node->block.fillWithColor(node->average);
+    } else {
+        for (int i = 0; i < 4; i++) {
+            node->child[i] = QuadTree::loadFromImage(in);
+        }
+    }
+    return node;
+}
+
+// Fungsi untuk mengisi canvas (matriks Pixel) menggunakan informasi quadtree
+void QuadTree::fillCanvas(Pixel** canvas) {
+    if (child[0] == nullptr) { // leaf node
         for (int y = 0; y < block.getHeight(); y++) {
             for (int x = 0; x < block.getWidth(); x++) {
-                Point p(x, y);
-                outputImage[position.getY() + y][position.getX() + x] = block.getIntensity(p);
+                canvas[position.getY() + y][position.getX() + x] = average;
             }
         }
     } else {
-        for (int i = 0; i < maxChild; i++) {
-            if(child[i])
-                child[i]->fillCompressedImage(outputImage);
+        for (int i = 0; i < 4; i++) {
+            if (child[i] != nullptr)
+                child[i]->fillCanvas(canvas);
         }
     }
 }
 
-// Fungsi untuk finalisasi canvas (jika diperlukan) dengan menyalin seluruh intensitas block dari QuadTree
-void QuadTree::fillCanvas(Pixel** canvas) {
-    fillCompressedImage(canvas);
-}
-
-// Fungsi export ke PNG (hasil kompresi final)
-void QuadTree::exportToPNG(const char* filename) {
-    int width = block.getWidth();
-    int height = block.getHeight();
-    unsigned char* imgData = new unsigned char[width * height * 3];
-    Pixel** outputImage = new Pixel*[height];
-    for (int i = 0; i < height; i++) {
-        outputImage[i] = new Pixel[width];
-    }
-    
-    fillCompressedImage(outputImage);
-    
+// Fungsi dummy untuk membangun pohon quadtree dari "gambar" buatan
+// Di sini, kita buat blok dengan ukuran width x height dan mengisi
+// setengah kiri merah, setengah kanan biru
+QuadTree* QuadTree::buildDummyTree(int width, int height) {
+    Block blk(width, height);
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            int idx = (y * width + x) * 3;
-            imgData[idx]     = outputImage[y][x].getColour(0);
-            imgData[idx + 1] = outputImage[y][x].getColour(1);
-            imgData[idx + 2] = outputImage[y][x].getColour(2);
+            if (x < width / 2)
+                blk.setIntensity(Point(x, y), Pixel(255, 0, 0));   // Merah
+            else
+                blk.setIntensity(Point(x, y), Pixel(0, 0, 255));   // Biru
         }
     }
-    
-    stbi_write_png(filename, width, height, 3, imgData, width * 3);
-    
-    for (int i = 0; i < height; i++) {
-        delete[] outputImage[i];
-    }
-    delete[] outputImage;
-    delete[] imgData;
+    QuadTree* node = new QuadTree(Point(0, 0), blk);
+    return node;
 }
 
 void QuadTree::printQuadTree()
@@ -247,13 +263,9 @@ int QuadTree::countNodes() {
 int QuadTree::getWidth() {
     return block.getWidth();
 }
-
+    
 int QuadTree::getHeight() {
     return block.getHeight();
-}
-
-Pixel QuadTree::getIntensity(Point pos) {
-    return block.getIntensity(pos);
 }
 
 // int main(int argc, char const *argv[])
