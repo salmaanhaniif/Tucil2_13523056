@@ -3,11 +3,11 @@
 #include <vector>
 #include <fstream>
 #include <filesystem>
-#include <iostream>
 #include "quadtree.hpp"
 #include <string>
 
 using namespace std;
+namespace fs = filesystem;
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -18,6 +18,59 @@ using namespace std;
 std::vector<unsigned char> load_file(const std::string& filename) {
     std::ifstream file(filename, std::ios::binary);
     return std::vector<unsigned char>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+double inputThreshold(double minVal, double maxVal, string validRange) {
+    double threshold;
+    while (true) {
+        cout << endl << "Nilai Threshold memungkinkan : " << minVal << " - " << maxVal << endl;
+        cout << "Nilai Threshold ideal : " << validRange << endl;
+        cout << "Tentukan Nilai Threshold: ";
+        cin >> threshold;
+
+        if (cin.fail() || threshold < minVal || threshold > maxVal) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Input threshold tidak valid, masukkan antara " << minVal << " dan " << maxVal << "." << endl;
+        } else {
+            break;
+        }
+    }
+    return threshold;
+}
+
+string inputOutputPath() {
+    string path;
+    cout << "Tuliskan filepath untuk hasil (output image): ";
+    cin >> path;
+
+    // Cek apakah file sudah ada
+    if (fs::exists(path)) {
+        char pilihan;
+        cout << "File sudah ada! Apakah ingin menimpa file tersebut? (y/n): ";
+        cin >> pilihan;
+
+        while (pilihan != 'y' && pilihan != 'Y' && pilihan != 'n' && pilihan != 'N') {
+            cout << "Input tidak valid. Masukkan 'y' atau 'n': ";
+            cin >> pilihan;
+        }
+
+        if (pilihan == 'n' || pilihan == 'N') {
+            cout << "Silakan masukkan filepath yang berbeda: ";
+            return inputOutputPath(); // rekursif sampai dapet path baru
+        }
+    }
+
+    return path;
+}
+
+void printSummary(const string& in, const string& out, int emd, double threshold, int minSize) {
+    cout << "============== RINGKASAN INPUT =============" << endl;
+    cout << "File input image   : " << in << endl;
+    cout << "Metode Error       : " << emd << endl;
+    cout << "Threshold          : " << threshold << endl;
+    cout << "Minimal Block Size : " << minSize << endl;
+    cout << "===========================" << endl << endl;
 }
 
 int main(int argc, char const *argv[])
@@ -32,23 +85,54 @@ int main(int argc, char const *argv[])
     cout << endl << "~Welcome to Image Compressor by QuadTree~" << endl << endl;
     cout << "Tuliskan filepath dari Image (input): ";
     cin >> imagepathIn;
+    // Validasi Error Measurement Method (EMD)
+    while (true) {
+        cout << "\nError Measurement Method" << endl;
+        cout << "1. Variance" << endl;
+        cout << "2. Mean Absolute Deviation" << endl;
+        cout << "3. Max Pixel Difference" << endl;
+        cout << "4. Entropy" << endl;
+        cout << "Choose one (number): ";
+        cin >> emd;
 
-    cout << "Error Measurement Method" << endl;
-    cout << "1. Variance" << endl;
-    cout << "2. Mean Absolute Deviation" << endl;
-    cout << "3. Max Pixel Difference" << endl;
-    cout << "4. Entropy" << endl;
-    cout << "Choose one (number): ";
-    cin >> emd;
-    cout << "Tentukan Nilai Threshold: ";
-    cin >> threshold;
-    cout << "Tentukan Area Minimum Block: ";
-    cin >> minSize;
-    cout << "Tuliskan filepath untuk hasil rekonstruksi (output image): ";
-    cin >> imagepathOut;
-    cout << endl;
+        if (cin.fail() || emd < 1 || emd > 4) {
+            cin.clear(); // Reset stream error flag
+            cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Singkirkan input yang salah
+            cout << "Input tidak valid. Silakan masukkan angka 1, 2, 3 atau 4." << endl;
+        } else {
+            break;
+        }
+    }
+
+    // Validasi input untuk threshold berdasarkan EMD yang dipilih
+    bool validThreshold = false;
+    if (emd == 1) {
+        threshold = inputThreshold(0, 16256, "50 - 500");
+    } else if (emd == 2) {
+        threshold = inputThreshold(0, 127.5, "5 - 30");
+    } else if (emd == 3) {
+        threshold = inputThreshold(0, 255, "10 - 50");
+    } else {
+        threshold = inputThreshold(0, 8, "0.5 - 3");
+    }
+
+    // Validasi input untuk Area Minimum Block (harus > 0)
+    while (true) {
+        cout << "\nTentukan Area Minimum Block: ";
+        cin >> minSize;
+        if (cin.fail() || minSize <= 0) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Input area minimum block tidak valid. Silakan masukkan angka positif." << endl;
+        } else {
+            break;
+        }
+    }
+    imagepathOut = inputOutputPath();
     
-    auto start = chrono::high_resolution_clock::now();
+    // Clear layar
+    system("cls");
+    printSummary(imagepathIn, imagepathOut, emd, threshold, minSize);
     
     cout << "Processing..." << endl << endl;
     // 1. Membangun quadtree dari gambar menggunakan fungsi impor buildFromImage
@@ -59,9 +143,10 @@ int main(int argc, char const *argv[])
     }
     
     // 2. Melakukan proses kompresi dengan subdivisi (sesuai error measurement, threshold, dan minimum block)
+    auto start = chrono::high_resolution_clock::now();
     tree->mainProcess(emd, threshold, minSize);
     
-    // 3. Serialisasi struktur quadtree ke file biner (misalnya "compressed.quadtree")
+    // 3. Serialisasi struktur quadtree ke file biner
     ofstream outFile("compressed.quadtree", ios::binary);
     if (!outFile) {
         cerr << "Gagal membuka file untuk penulisan quadtree!" << endl;
@@ -88,17 +173,15 @@ int main(int argc, char const *argv[])
     for (int i = 0; i < height; i++) {
         canvas[i] = new Pixel[width];
     }
-    // Inisialisasi canvas dengan warna default (misal hitam)
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            canvas[y][x] = Pixel(0,0,0);
-        }
-    }
+    // Inisialisasi canvas dengan warna default (hitam)
+    // for (int y = 0; y < height; y++) {
+    //     for (int x = 0; x < width; x++) {
+    //         canvas[y][x] = Pixel(0,0,0);
+    //     }
+    // }
     loadedTree->fillCanvas(canvas);
     
-    // 6. (Opsional) Export canvas hasil rekonstruksi ke file gambar
-    // Jika Anda menggunakan library seperti stb_image_write, Anda bisa membuat buffer pixel dan memanggil fungsi write
-    // Contoh: membuat buffer dan memanggil stbi_write_png:
+    // 6. Export canvas hasil rekonstruksi ke file gambar
     unsigned char* imgData = new unsigned char[width * height * 3];
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
@@ -108,7 +191,6 @@ int main(int argc, char const *argv[])
             imgData[idx + 2] = canvas[y][x].getColour(2);
         }
     }
-    // Contoh pemanggilan stbi_write_png (pastikan sudah include header yang diperlukan)
     stbi_write_png(imagepathOut.c_str(), width, height, 3, imgData, width * 3);
     
     // 7. Menghitung waktu eksekusi dan perbandingan ukuran file
@@ -131,8 +213,8 @@ int main(int argc, char const *argv[])
     cout << "Size before (input)  : " << sizeIn/1000 << " kb, " << widthIn << "x" << heightIn << " pixels" << endl;
     cout << "Size after (output)  : " << sizeOut/1000 << " kb, " << widthOut << "x" << heightOut << " pixels" << endl;
     cout << "Compression Percent  : " << fixed << setprecision(3) << cp << " %" << endl;
-    cout << "Tree's Depth         : " << tree->getDepth() << endl;     // Pastikan fungsi getDepth() sudah diimplementasikan
-    cout << "Nodes Count          : " << tree->countNodes() << endl;     // Pastikan fungsi countNodes() sudah diimplementasikan
+    cout << "Tree's Depth         : " << tree->getDepth() << endl;    
+    cout << "Nodes Count          : " << tree->countNodes() << endl;   
     cout << "Result Path          : " << imagepathOut << endl;
     
     // 8. Cleanup memori
