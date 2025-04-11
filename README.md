@@ -1,6 +1,9 @@
 
 # QuadTree Image Compression
 
+![image](https://github.com/user-attachments/assets/8bd6325f-8edc-4a97-a226-e10d438c4e98)
+
+
 ## Deskripsi Singkat
 Program ini merupakan implementasi algoritma *Divide and Conquer* untuk melakukan kompresi gambar menggunakan metode *QuadTree*. Program bekerja dengan membagi gambar menjadi blok-blok berdasarkan keseragaman warna, sehingga dapat mengurangi ukuran file gambar.
 
