@@ -79,30 +79,6 @@ Program akan meminta input:
 
 Setelah input selesai, layar akan dibersihkan (*clear screen*) dan seluruh input akan ditampilkan kembali untuk konfirmasi.
 
-/       → Output file hasil kompresi gambar
-├── bin/      → File hasil kompilasi (.exe atau output file)
-└── run.bat    → Script otomatis untuk compile & run
-
----
-
-## Cara Kompilasi Program
-
-### Kompilasi Manual
-Masuk ke folder `src/`:
-```
-cd src
-g++ main.cpp block.cpp pixel.cpp point.cpp quadtree.cpp -o ../bin/main
-```
-
-Jika berhasil, file output akan ada di folder `bin/`.
-
-### Kompilasi Otomatis (Windows)
-Cukup jalankan file `run.bat` di root folder project:
-```
-double click run.bat
-```
-
----
 
 ## Cara Menjalankan Program
 
